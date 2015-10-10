@@ -16,6 +16,41 @@
 # specific language governing permissions and limitations under the License.
 # ==============================================================================
 
+# Get the ID and security principal of the current user account
+$currentWindowsID=[System.Security.Principal.WindowsIdentity]::GetCurrent()
+$windowsPrincipal=new-object System.Security.Principal.WindowsPrincipal($currentWindowsID)
+
+# Get the security principal for the Administrator role
+$adminRole=[System.Security.Principal.WindowsBuiltInRole]::Administrator
+
+# Check to see if we are currently running "as Administrator"
+if ($windowsPrincipal.IsInRole($adminRole))
+   {
+   # We are running "as Administrator" - so change the title and background color to indicate this
+   $Host.UI.RawUI.WindowTitle = $myInvocation.MyCommand.Definition + "(Elevated)"
+   $Host.UI.RawUI.BackgroundColor = "DarkBlue"
+   clear-host
+   }
+else
+   {
+   # We are not running "as Administrator" - so relaunch as administrator
+   
+   # Create a new process object that starts PowerShell
+   $newProcess = new-object System.Diagnostics.ProcessStartInfo "PowerShell";
+   
+   # Specify the current script path and name as a parameter
+   $newProcess.Arguments = $myInvocation.MyCommand.Definition;
+   
+   # Indicate that the process should be elevated
+   $newProcess.Verb = "runas";
+   
+   # Start the new process
+   [System.Diagnostics.Process]::Start($newProcess);
+   
+   # Exit from the current, unelevated, process
+   exit
+   }
+
 # variables
 $url = "https://chocolatey.org/api/v2/package/chocolatey/"
 if ($env:TEMP -eq $null) {
@@ -46,28 +81,9 @@ $7zaExe = Join-Path $tempDir '7za.exe'
 
 Download-File 'https://chocolatey.org/7za.exe' "$7zaExe"
 
-# Github's Raw endpoint does not honor TLS and the .net 2.0 client will
-# not fall back to Ssl3 un like the newer .net4 clients. So .net2 will
-# time out if we do not explicitly set the protocol to Ssl3
-#$currentProtocol = [System.Net.ServicePointManager]::SecurityProtocol
-#try {
-#    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Ssl3
-#    Download-File 'https://github.com/chocolatey/chocolatey/blob/master/src/tools/7za.exe?raw=true' "$7zaExe"
-#}
-#catch {
-#    throw
-#}
-#finally {
-#    [System.Net.ServicePointManager]::SecurityProtocol = $currentProtocol
-#}
-
 # unzip the package
 Write-Host "Extracting $file to $tempDir..."
 Start-Process "$7zaExe" -ArgumentList "x -o`"$tempDir`" -y `"$file`"" -Wait -NoNewWindow
-#$shellApplication = new-object -com shell.application
-#$zipPackage = $shellApplication.NameSpace($file)
-#$destinationFolder = $shellApplication.NameSpace($tempDir)
-#$destinationFolder.CopyHere($zipPackage.Items(),0x10)
 
 # call chocolatey install
 Write-Host "Installing chocolatey on this machine"
